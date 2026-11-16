@@ -31,6 +31,30 @@
   catch { CFG = Object.assign({}, DEFAULTS); }
   const save = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(CFG)); } catch {} };
 
+  // ── Khóa màn hình (PIN) ──────────────────────────────────────────────────────
+  const PIN_KEY = 'zpPin', LOCK_KEY = 'zpLocked';
+  const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+  let lockStyleEl = null;
+
+  // Ẩn toàn bộ trang (trừ panel) ngay khi khóa, kể cả lúc F5 chưa dựng xong overlay
+  function setLocked(on) {
+    lsSet(LOCK_KEY, on ? '1' : null);
+    if (on && !lockStyleEl) {
+      lockStyleEl = document.createElement('style');
+      lockStyleEl.textContent = 'body > *:not(#zp-root){visibility:hidden!important}';
+      (document.head || document.documentElement).appendChild(lockStyleEl);
+    } else if (!on && lockStyleEl) { lockStyleEl.remove(); lockStyleEl = null; }
+  }
+
+  async function hashPin(pin, salt) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
+    return btoa(String.fromCharCode(...new Uint8Array(bits)));
+  }
+
+  if (lsGet(LOCK_KEY) === '1') { if (lsGet(PIN_KEY)) setLocked(true); else lsSet(LOCK_KEY, null); }
+
   // ── Recall history ───────────────────────────────────────────────────────────
   const recallHistory = [];
   let recallBadgeEl = null, recallListEl = null, _recallHook = null;
@@ -349,6 +373,23 @@
     .zp-empty  { font-size:11.5px; color:#475569; text-align:center; padding:24px 0; }
     .zp-recall-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
     .zp-recall-title { font-size:10px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.5px; }
+
+    /* Khóa màn hình */
+    .zp-hr { display:flex; align-items:center; gap:8px; }
+    #zp-lockbtn { background:none; border:none; color:#94a3b8; cursor:pointer; padding:2px; display:flex; }
+    #zp-lockbtn:hover { color:#fff; }
+    #zp-lockbtn svg { width:14px; height:14px; }
+    #zp-lock { position:fixed; inset:0; z-index:2147483647; background:#0a0f1e; color:#e2e8f0; display:flex; align-items:center; justify-content:center; }
+    #zp-lock [hidden], #zp-lock[hidden] { display:none !important; }
+    #zp-lk-box { width:260px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+    #zp-lk-box > svg { width:34px; height:34px; fill:#0068ff; }
+    #zp-lk-title { font-size:15px; font-weight:600; }
+    #zp-lock input { width:100%; box-sizing:border-box; background:#060b18; border:1px solid rgba(255,255,255,.12); color:#e2e8f0; border-radius:8px; padding:9px 12px; font-size:14px; text-align:center; letter-spacing:3px; outline:none; }
+    #zp-lock input:focus { border-color:#0068ff; }
+    #zp-lk-err { font-size:11.5px; color:#f87171; min-height:14px; }
+    #zp-lk-go { width:100%; background:#0068ff; border:none; color:#fff; border-radius:8px; padding:9px; font-size:13px; font-weight:600; cursor:pointer; }
+    #zp-lk-go:hover { background:#1a7aff; }
+    #zp-lk-x { background:none; border:none; color:#64748b; font-size:11.5px; cursor:pointer; }
   `;
 
   const FAB_ICON = `<svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.6"><path d="M10 2.5 L17 5.5 L17 10 C17 14 10 17.5 10 17.5 C10 17.5 3 14 3 10 L3 5.5 Z"/><path stroke-width="1.4" d="M7 10 L9 12 L13 8"/></svg>`;
@@ -409,7 +450,7 @@
 
     // Header
     const hdr = document.createElement('div'); hdr.id = 'zp-hdr';
-    hdr.innerHTML = `<span id="zp-title"><svg viewBox="0 0 16 16" fill="none" stroke="#0068ff" stroke-width="1.5"><path d="M8 1.5L14 4v4.5C14 12 8 14.5 8 14.5S2 12 2 8.5V4z"/><path stroke-width="1.3" d="M5.5 8.5L7 10l3.5-3"/></svg>Zalo Privacy</span><span id="zp-ver">v0.9</span>`;
+    hdr.innerHTML = `<span id="zp-title"><svg viewBox="0 0 16 16" fill="none" stroke="#0068ff" stroke-width="1.5"><path d="M8 1.5L14 4v4.5C14 12 8 14.5 8 14.5S2 12 2 8.5V4z"/><path stroke-width="1.3" d="M5.5 8.5L7 10l3.5-3"/></svg>Zalo Privacy</span><span class="zp-hr"><button id="zp-lockbtn" title="Khóa Zalo"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a3 3 0 0 0-3 3v2H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V4a3 3 0 0 0-3-3zM6 4a2 2 0 1 1 4 0v2H6V4z"/></svg></button><span id="zp-ver">v0.9</span></span>`;
 
     // 4 tabs
     const tabBar = document.createElement('div'); tabBar.id = 'zp-tabs';
@@ -487,6 +528,84 @@
     wrap.appendChild(style); wrap.appendChild(panel); wrap.appendChild(fabWrap);
     root.appendChild(wrap);
 
+    // Overlay khóa (nằm sau FAB trong DOM nên phủ lên cả panel)
+    const lockEl = document.createElement('div'); lockEl.id = 'zp-lock'; lockEl.hidden = true;
+    lockEl.innerHTML = `<div id="zp-lk-box"><svg viewBox="0 0 16 16"><path d="M8 1a3 3 0 0 0-3 3v2H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V4a3 3 0 0 0-3-3zM6 4a2 2 0 1 1 4 0v2H6V4z"/></svg><div id="zp-lk-title"></div><input id="zp-lk-a" type="password" autocomplete="off" maxlength="12"><input id="zp-lk-b" type="password" autocomplete="off" maxlength="12" placeholder="Nhập lại mã PIN"><div id="zp-lk-err"></div><button id="zp-lk-go"></button><button id="zp-lk-x">Hủy</button></div>`;
+    wrap.appendChild(lockEl);
+    ['keydown', 'keyup', 'keypress'].forEach((t) => lockEl.addEventListener(t, (e) => e.stopPropagation()));
+    const $ = (id) => lockEl.querySelector('#' + id);
+    const setErr = (t) => { $('zp-lk-err').textContent = t; };
+    let lockMode = 'unlock';
+
+    // setup: đặt PIN lần đầu (rồi khóa) · unlock: mở khóa · change: nhập PIN cũ để đổi
+    // newpin: nhập PIN mới (không khóa) · remove: nhập PIN cũ để xóa PIN
+    const LOCK_TEXT = {
+      setup:  ['Đặt mã PIN để khóa', 'Mã PIN mới (4-12 ký tự)', 'Đặt PIN & khóa'],
+      newpin: ['Đặt mã PIN mới', 'Mã PIN mới (4-12 ký tự)', 'Lưu PIN mới'],
+      unlock: ['Zalo đã khóa', 'Nhập mã PIN', 'Mở khóa'],
+      change: ['Nhập PIN hiện tại để đổi PIN', 'Mã PIN hiện tại', 'Tiếp tục'],
+      remove: ['Nhập PIN hiện tại để xóa PIN', 'Mã PIN hiện tại', 'Xóa PIN'],
+    };
+
+    function openLock(mode) {
+      lockMode = mode; lockEl.hidden = false; panel.hidden = true;
+      const [title, ph, go] = LOCK_TEXT[mode];
+      $('zp-lk-title').textContent = title;
+      $('zp-lk-a').placeholder = ph;
+      $('zp-lk-b').hidden = mode !== 'setup' && mode !== 'newpin';
+      $('zp-lk-x').hidden = mode === 'unlock';
+      $('zp-lk-go').textContent = go;
+      $('zp-lk-a').value = ''; $('zp-lk-b').value = ''; setErr('');
+      setTimeout(() => $('zp-lk-a').focus(), 0);
+    }
+
+    async function checkPin(pin) {
+      let rec; try { rec = JSON.parse(lsGet(PIN_KEY)); } catch {}
+      if (!rec) return true;
+      const salt = Uint8Array.from(atob(rec.s), (c) => c.charCodeAt(0));
+      return (await hashPin(pin, salt)) === rec.h;
+    }
+
+    async function submitLock() {
+      const a = $('zp-lk-a').value;
+      if (lockMode === 'setup' || lockMode === 'newpin') {
+        if (a.length < 4) return setErr('PIN tối thiểu 4 ký tự');
+        if (a !== $('zp-lk-b').value) return setErr('Hai lần nhập không khớp');
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        lsSet(PIN_KEY, JSON.stringify({ s: btoa(String.fromCharCode(...salt)), h: await hashPin(a, salt) }));
+        refreshPinRow();
+        if (lockMode === 'setup') { setLocked(true); openLock('unlock'); } else lockEl.hidden = true;
+        return;
+      }
+      if (!(await checkPin(a))) { setErr('Sai mã PIN'); $('zp-lk-a').value = ''; return; }
+      if (lockMode === 'change') { openLock('newpin'); return; }
+      if (lockMode === 'remove') { lsSet(PIN_KEY, null); refreshPinRow(); lockEl.hidden = true; return; }
+      setLocked(false); lockEl.hidden = true;
+    }
+
+    $('zp-lk-go').addEventListener('click', submitLock);
+    $('zp-lk-x').addEventListener('click', () => { lockEl.hidden = true; });
+    lockEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLock(); });
+    hdr.querySelector('#zp-lockbtn').addEventListener('click', () => {
+      if (lsGet(PIN_KEY)) { setLocked(true); openLock('unlock'); } else openLock('setup');
+    });
+
+    // Hàng "Mã PIN khóa" trong tab Cài đặt: chỉ hiện khi đã có PIN
+    const pinRow = document.createElement('div'); pinRow.className = 'zp-row';
+    const pinLbl = document.createElement('span'); pinLbl.className = 'zp-lbl'; pinLbl.textContent = 'Mã PIN khóa';
+    const pinActs = document.createElement('div'); pinActs.className = 'zp-log-actions';
+    [['Đổi PIN', 'change'], ['Xóa PIN', 'remove']].forEach(([text, mode]) => {
+      const b = document.createElement('button'); b.className = 'zp-btn'; b.textContent = text;
+      b.addEventListener('click', () => openLock(mode));
+      pinActs.appendChild(b);
+    });
+    pinRow.appendChild(pinLbl); pinRow.appendChild(pinActs);
+    settingsPane.appendChild(pinRow);
+    function refreshPinRow() { pinRow.style.display = lsGet(PIN_KEY) ? '' : 'none'; }
+    refreshPinRow();
+
+    if (lsGet(LOCK_KEY) === '1') openLock('unlock');
+
     // Kéo thả — kéo xa hơn vài px thì bỏ qua click để không bật/tắt panel
     let drag = null, moved = false;
     fab.addEventListener('click', () => { if (moved) { moved = false; return; } panel.hidden = !panel.hidden; });
@@ -514,6 +633,6 @@
   if (document.body) { injectUI(); startDomObserver(); }
   else document.addEventListener('DOMContentLoaded', () => { injectUI(); startDomObserver(); });
 
-  if (typeof __ZP_TEST__ === 'function') __ZP_TEST__({ HTTP_RULES, extractJson, isRecall });
+  if (typeof __ZP_TEST__ === 'function') __ZP_TEST__({ HTTP_RULES, extractJson, isRecall, hashPin });
   console.info('[ZaloPriv] v0.9 loaded');
 })();

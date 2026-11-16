@@ -14,13 +14,14 @@ const ctx = {
   XMLHttpRequest: function () {},
   WebSocket: function () {},
   fetch() {},
+  crypto: globalThis.crypto, TextEncoder, btoa, Uint8Array,
 };
 ctx.XMLHttpRequest.prototype = { open() {}, send() {} };
 ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(__dirname + '/Zalo privacy.js', 'utf8'), ctx);
 
-const { HTTP_RULES, extractJson, isRecall } = api;
+const { HTTP_RULES, extractJson, isRecall, hashPin } = api;
 const rule = (name) => HTTP_RULES.find((r) => r.name === name).re;
 const yes = (name, ...paths) => paths.forEach((p) => assert(rule(name).test(p), `${name} phải khớp ${p}`));
 const no = (name, ...paths) => paths.forEach((p) => assert(!rule(name).test(p), `${name} KHÔNG được khớp ${p}`));
@@ -50,4 +51,11 @@ assert.strictEqual(isRecall(extractJson('{"data":{"action":"undo"}}')), true);
 assert.strictEqual(isRecall(extractJson('{"encrypt":2,"data":"x+undo+y/recall/z"}')), false);
 assert.strictEqual(isRecall(extractJson('{"cmd":1,"data":"I cannot recall that, undo"}')), false);
 
-console.log('OK');
+(async () => {
+  const salt = new Uint8Array(16).fill(7), salt2 = new Uint8Array(16).fill(8);
+  const h = await hashPin('1234', salt);
+  assert.strictEqual(h, await hashPin('1234', salt), 'cùng PIN + salt phải ra cùng hash');
+  assert.notStrictEqual(h, await hashPin('1235', salt), 'khác PIN phải khác hash');
+  assert.notStrictEqual(h, await hashPin('1234', salt2), 'khác salt phải khác hash');
+  console.log('OK');
+})();
